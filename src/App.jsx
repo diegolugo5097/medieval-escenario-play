@@ -16,6 +16,7 @@ export default function App() {
   const [nowPlaying, setNowPlaying] = useState(null);
   const [queue, setQueue] = useState([]);
   const [paused, setPaused] = useState(false);
+  const [volume, setVolume] = useState(70);
   const [connected, setConnected] = useState(false);
 
   // El pergamino: "full" = mostrado completo, "mini" = pequeño en esquina
@@ -27,6 +28,7 @@ export default function App() {
   const wsRef = useRef(null);
   const hideTimerRef = useRef(null);
   const lastSongIdRef = useRef(null);
+  const volumeRef = useRef(70);
 
   /* ---- Mostrar pergamino completo y programar que se encoja en 5s ---- */
   function revealScroll() {
@@ -48,6 +50,7 @@ export default function App() {
           setQueue(data.queue || []);
           setNowPlaying(data.nowPlaying || null);
           setPaused(!!data.paused);
+          if (typeof data.volume === "number") setVolume(data.volume);
         }
       };
       ws.onclose = () => {
@@ -85,6 +88,7 @@ export default function App() {
         events: {
           onReady: () => {
             ytReadyRef.current = true;
+            if (playerRef.current?.setVolume) playerRef.current.setVolume(volumeRef.current);
             if (currentVideoRef.current) {
               playerRef.current.loadVideoById(currentVideoRef.current);
             }
@@ -124,6 +128,17 @@ export default function App() {
     if (paused && p.pauseVideo) p.pauseVideo();
     if (!paused && p.playVideo) p.playVideo();
   }, [paused]);
+
+  /* ---- Aplicar volumen que viene del backend ---- */
+  useEffect(() => {
+    volumeRef.current = volume;
+    const p = playerRef.current;
+    if (!ytReadyRef.current || !p || !p.setVolume) return;
+    p.setVolume(volume);
+    // Si el video arrancó mudo (autoplay) y el admin sube el volumen, desmutear
+    if (volume > 0 && p.isMuted && p.isMuted() && p.unMute) p.unMute();
+    if (volume === 0 && p.mute) p.mute();
+  }, [volume, nowPlaying?.videoId]);
 
   async function avanzar() {
     try {
