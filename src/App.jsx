@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { API_URL, FRAME_HOLE } from "./config";
+import { API_URL } from "./config";
 
 /* Carga la YouTube IFrame API una sola vez */
 function loadYT() {
@@ -18,10 +18,22 @@ export default function App() {
   const [paused, setPaused] = useState(false);
   const [connected, setConnected] = useState(false);
 
+  // El pergamino: "full" = mostrado completo, "mini" = pequeño en esquina
+  const [scrollState, setScrollState] = useState("full");
+
   const playerRef = useRef(null);
   const ytReadyRef = useRef(false);
   const currentVideoRef = useRef(null);
   const wsRef = useRef(null);
+  const hideTimerRef = useRef(null);
+  const lastSongIdRef = useRef(null);
+
+  /* ---- Mostrar pergamino completo y programar que se encoja en 5s ---- */
+  function revealScroll() {
+    setScrollState("full");
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => setScrollState("mini"), 5000);
+  }
 
   /* ---- Conexión WebSocket con el backend ---- */
   useEffect(() => {
@@ -47,7 +59,13 @@ export default function App() {
     return () => {
       alive = false;
       wsRef.current?.close();
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     };
+  }, []);
+
+  /* ---- Mostrar pergamino completo al cargar ---- */
+  useEffect(() => {
+    revealScroll();
   }, []);
 
   /* ---- Inicializar el player de YouTube ---- */
@@ -80,7 +98,7 @@ export default function App() {
     });
   }, []);
 
-  /* ---- Cuando cambia la canción actual, cargarla ---- */
+  /* ---- Cuando cambia la canción actual: cargar video + revelar pergamino ---- */
   useEffect(() => {
     const vid = nowPlaying?.videoId || null;
     currentVideoRef.current = vid;
@@ -90,7 +108,14 @@ export default function App() {
     if (!vid && ytReadyRef.current && playerRef.current?.stopVideo) {
       playerRef.current.stopVideo();
     }
-  }, [nowPlaying?.videoId]);
+
+    // Si de verdad cambió la canción (no solo un re-render), revelar pergamino
+    const sid = nowPlaying?.id || null;
+    if (sid !== lastSongIdRef.current) {
+      lastSongIdRef.current = sid;
+      revealScroll();
+    }
+  }, [nowPlaying?.videoId, nowPlaying?.id]);
 
   /* ---- Aplicar pausa/play que viene del backend ---- */
   useEffect(() => {
@@ -100,7 +125,6 @@ export default function App() {
     if (!paused && p.playVideo) p.playVideo();
   }, [paused]);
 
-  // Lo dispara el propio reproductor al terminar un video (no requiere admin).
   async function avanzar() {
     try {
       await fetch(`${API_URL}/api/next`, { method: "POST" });
@@ -109,68 +133,63 @@ export default function App() {
 
   return (
     <div className="stage">
-      <div className="embers" />
+      {/* Video a pantalla completa */}
+      <div className="video-full">
+        <div id="yt-player" className="yt-player" />
 
-      <div className="frame-wrap">
-        <div className="frame-box">
-          <div
-            className="video-hole"
-            style={{
-              left: `${FRAME_HOLE.left}%`,
-              top: `${FRAME_HOLE.top}%`,
-              width: `${FRAME_HOLE.width}%`,
-              height: `${FRAME_HOLE.height}%`,
-            }}
-          >
-            <div id="yt-player" className="yt-player" />
-
-            {!nowPlaying && (
-              <div className="idle">
-                <div className="idle-crest">⚜</div>
-                <h2>El escenario aguarda</h2>
-                <p>Pedid una canción desde la app del Café Medieval</p>
-                <div className="idle-flame">♪ ♫ ♪</div>
-              </div>
-            )}
-
-            {nowPlaying && paused && (
-              <div className="paused-badge">⏸ En pausa</div>
-            )}
-          </div>
-
-          <img className="frame-img" src="/marco_medieval.png" alt="" />
-        </div>
-      </div>
-
-      <aside className="sidebar">
-        <h1 className="brand">Café Medieval</h1>
-        <div className={`status ${connected ? "on" : "off"}`}>
-          {connected ? "● Conectado" : "○ Reconectando…"}
-        </div>
-
-        {nowPlaying && (
-          <div className="np">
-            <span className="np-label">Sonando ahora</span>
-            <span className="np-title">{nowPlaying.title}</span>
-            <span className="np-by">pedida por {nowPlaying.addedBy}</span>
+        {!nowPlaying && (
+          <div className="idle">
+            <div className="idle-crest">⚜</div>
+            <h2>El escenario aguarda</h2>
+            <p>Pedid una canción desde la app del Café Medieval</p>
+            <div className="idle-flame">♪ ♫ ♪</div>
           </div>
         )}
 
-        <div className="q-head">A continuación · {queue.length}</div>
-        <ol className="q-list">
-          {queue.length === 0 && (
-            <li className="q-empty">— silencio en la taberna —</li>
+        {nowPlaying && paused && (
+          <div className="paused-badge">⏸ En pausa</div>
+        )}
+      </div>
+
+      {/* Pergamino de la cola a la derecha */}
+      <aside className={`scroll-panel ${scrollState}`}>
+        <div className="scroll-inner">
+          <div className="scroll-top">
+            <span className="scroll-crest">⚜</span>
+            <h1 className="scroll-brand">Café Medieval</h1>
+            <span className={`dot ${connected ? "on" : "off"}`} />
+          </div>
+
+          {nowPlaying && (
+            <div className="np">
+              <span className="np-label">Sonando ahora</span>
+              <span className="np-title">{nowPlaying.title}</span>
+              <span className="np-by">pedida por {nowPlaying.addedBy}</span>
+            </div>
           )}
-          {queue.map((s, i) => (
-            <li key={s.id} className="q-item">
-              <span className="q-num">{i + 1}</span>
-              <div className="q-info">
-                <span className="q-song">{s.title}</span>
-                <span className="q-by">{s.addedBy}</span>
-              </div>
-            </li>
-          ))}
-        </ol>
+
+          <div className="q-head">A continuación · {queue.length}</div>
+          <ol className="q-list">
+            {queue.length === 0 && (
+              <li className="q-empty">— silencio en la taberna —</li>
+            )}
+            {queue.map((s, i) => (
+              <li key={s.id} className="q-item">
+                <span className="q-num">{i + 1}</span>
+                <div className="q-info">
+                  <span className="q-song">{s.title}</span>
+                  <span className="q-by">{s.addedBy}</span>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        {/* Versión mini: solo un resumen cuando está encogido */}
+        <div className="scroll-mini-label">
+          <span className="mini-icon">📜</span>
+          <span className="mini-count">{queue.length}</span>
+        </div>
       </aside>
     </div>
   );
