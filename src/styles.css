@@ -3,9 +3,7 @@
   --gold-bright: #f2d472;
   --wood: #2a1a0d;
   --wine: #6e1f1f;
-  --ink: #3a2912;
-  --parch1: #f0e0b8;
-  --parch2: #d8c08a;
+  --ink: #4a2f18;
 }
 
 * { box-sizing: border-box; }
@@ -13,208 +11,175 @@ html, body, #root { margin: 0; height: 100%; }
 
 body {
   font-family: "EB Garamond", Georgia, serif;
-  background: #000;
+  background: radial-gradient(ellipse at center, #1a1108 0%, #000 85%);
   color: #f4e6c6;
   overflow: hidden;
 }
 
-.stage {
-  position: fixed;
-  inset: 0;
-}
+.stage { position: fixed; inset: 0; isolation: isolate; }
 
-/* ---------- Video a pantalla completa ---------- */
-.video-full {
+.embers {
+  position: fixed; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(2px 2px at 20% 80%, rgba(255,170,60,.4), transparent),
+    radial-gradient(2px 2px at 70% 60%, rgba(255,140,40,.3), transparent);
+  animation: flicker 4s infinite alternate;
+}
+@keyframes flicker { from { opacity:.6; } to { opacity:1; } }
+
+/* ---------- Marco + video (pantalla completa) ---------- */
+.frame-wrap {
   position: absolute;
   inset: 0;
-  background: #000;
 }
-.yt-player,
-.yt-player iframe {
+.frame-box {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  border: 0;
-  display: block;
 }
-
-/* Pantalla en reposo */
-.idle {
+.frame-img {
   position: absolute;
   inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  background: radial-gradient(ellipse at center, #1a1006, #000);
-  color: var(--gold-bright);
-  gap: 10px;
-}
-.idle-crest { font-size: 64px; filter: drop-shadow(0 0 14px rgba(242,212,114,.5)); }
-.idle h2 { font-family: "Cinzel Decorative", serif; margin: 0; font-size: clamp(24px, 4vw, 44px); }
-.idle p { margin: 0; font-style: italic; opacity: .8; font-size: clamp(14px, 1.6vw, 20px); }
-.idle-flame { margin-top: 12px; letter-spacing: 8px; color: var(--gold); animation: flicker 2s infinite alternate; }
-@keyframes flicker { from { opacity: .6; } to { opacity: 1; } }
-
-.paused-badge {
-  position: absolute;
-  top: 20px;
-  left: 20px;
-  background: rgba(20,12,6,.85);
-  border: 1px solid var(--gold);
-  color: var(--gold-bright);
-  font-family: "Cinzel", serif;
-  font-size: 16px;
-  letter-spacing: 1px;
-  padding: 8px 14px;
-  border-radius: 6px;
-  z-index: 5;
-}
-
-/* ---------- Pergamino de la cola ---------- */
-.scroll-panel {
-  position: absolute;
-  top: 0;
-  right: 0;
+  z-index: 30;          /* el marco SIEMPRE por encima de todo (video y pergamino) */
+  width: 100%;
   height: 100%;
-  z-index: 10;
-  transition: width .6s ease, opacity .6s ease;
+  object-fit: fill;
+  pointer-events: none;
+  transform: translateZ(0);  /* fuerza al navegador a respetar z-index sobre el iframe */
+  will-change: transform;
+}
+.video-hole {
+  position: absolute;
+  z-index: 1;
+  background: #000;
   overflow: hidden;
 }
+/* El iframe se dimensiona por JS (cover-fit) para llenar el hueco sin barras negras */
+.yt-player {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.yt-player iframe {
+  display: block;
+  border: 0;
+}
 
-/* Estado COMPLETO */
+.idle {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; gap: 10px;
+  background: radial-gradient(ellipse at center, #1a1006, #000);
+  color: var(--gold-bright);
+}
+.idle-crest { font-size: 56px; filter: drop-shadow(0 0 12px rgba(242,212,114,.5)); }
+.idle h2 { font-family: "Cinzel Decorative", serif; margin: 0; font-size: clamp(20px,3vw,38px); }
+.idle p { margin: 0; font-style: italic; opacity: .8; font-size: clamp(13px,1.5vw,18px); }
+.idle-flame { margin-top: 10px; letter-spacing: 8px; color: var(--gold); animation: flicker 2s infinite alternate; }
+
+.paused-badge {
+  position: absolute; top: 16px; left: 16px;
+  background: rgba(20,12,6,.85); border: 1px solid var(--gold);
+  color: var(--gold-bright); font-family: "Cinzel", serif;
+  font-size: 15px; letter-spacing: 1px; padding: 7px 13px; border-radius: 6px; z-index: 5;
+}
+
+/* ---------- Pergamino vertical (cola) ---------- */
+.scroll-panel {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  width: 300px;
+  z-index: 40;
+  /* La animación es de ALTO: abre de arriba a abajo */
+  transition: height .7s cubic-bezier(.22,1,.36,1), opacity .5s ease;
+  overflow: hidden;
+}
 .scroll-panel.full {
-  width: 360px;
+  height: calc(100vh - 60px);
   opacity: 1;
 }
-/* Estado MINI: pequeño y semitransparente en la esquina */
 .scroll-panel.mini {
-  width: 72px;
-  opacity: 0.45;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
-/* Contenido del pergamino (textura) */
-.scroll-inner {
-  height: 100%;
-  width: 360px; /* ancho fijo: al encoger el panel, se recorta */
-  padding: 24px 20px;
-  overflow-y: auto;
-  background:
-    linear-gradient(135deg, rgba(255,255,255,.06), transparent 40%),
-    repeating-linear-gradient(0deg, rgba(120,85,30,.05) 0 3px, transparent 3px 6px),
-    linear-gradient(180deg, var(--parch1), var(--parch2));
-  color: var(--ink);
-  border-left: 3px solid var(--gold);
-  box-shadow: -10px 0 40px rgba(0,0,0,.6), inset 0 0 80px rgba(140,100,40,.25);
-  /* bordes irregulares tipo pergamino */
-  -webkit-mask-image: radial-gradient(circle at 0 50%, transparent 0, transparent 6px, #000 7px);
-  opacity: 0.94;
-  transition: opacity .6s ease;
+/* Imagen del pergamino como fondo, estirada al alto del panel */
+.scroll-bg {
+  position: absolute;
+  inset: 0;
+  background-image: url("/pergamino.png");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 8px 30px rgba(0,0,0,.7));
+  pointer-events: none;
 }
-.scroll-panel.full .scroll-inner { opacity: 0.94; }
-.scroll-panel.mini .scroll-inner { opacity: 0; }
+
+/* Contenido sobre el pergamino */
+.scroll-content {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  padding: 64px 40px 60px;   /* deja ver los rodillos arriba/abajo */
+  overflow-y: auto;
+  color: var(--ink);
+  transition: opacity .4s ease;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120,70,30,.5) transparent;
+}
+.scroll-panel.mini .scroll-content { opacity: 0; }
+
+.scroll-content::-webkit-scrollbar { width: 6px; }
+.scroll-content::-webkit-scrollbar-thumb { background: rgba(120,70,30,.5); border-radius: 3px; }
 
 .scroll-top {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
   margin-bottom: 14px;
-  padding-bottom: 12px;
-  border-bottom: 2px solid rgba(140,100,40,.4);
 }
-.scroll-crest { font-size: 24px; color: #6b4a1c; }
 .scroll-brand {
   font-family: "Cinzel Decorative", serif;
-  font-size: 20px;
-  color: #4a2f10;
-  margin: 0;
-  flex: 1;
-  line-height: 1;
+  font-size: 19px; color: #5a3210; margin: 0; text-align: center;
+  text-shadow: 0 1px 0 rgba(255,255,255,.3);
 }
-.dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .dot.on { background: #4e7a3a; box-shadow: 0 0 6px #4e7a3a; }
 .dot.off { background: #b07a2a; }
 
 .np {
-  background: linear-gradient(180deg, rgba(110,31,31,.92), rgba(74,20,20,.92));
+  background: linear-gradient(180deg, rgba(110,31,31,.9), rgba(74,20,20,.9));
   border: 1px solid var(--gold);
-  border-radius: 8px;
-  padding: 12px;
-  margin-bottom: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+  border-radius: 8px; padding: 11px; margin-bottom: 16px;
+  display: flex; flex-direction: column; gap: 3px;
 }
 .np-label {
-  font-family: "Cinzel", serif;
-  font-size: 10px;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--gold-bright);
+  font-family: "Cinzel", serif; font-size: 10px; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--gold-bright);
 }
-.np-title { font-weight: 600; font-size: 17px; color: #fff; }
+.np-title { font-weight: 600; font-size: 16px; color: #fff; }
 .np-by { font-style: italic; font-size: 13px; color: #f0d9b0; }
 
 .q-head {
-  font-family: "Cinzel", serif;
-  font-size: 13px;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: #6b4a1c;
-  border-bottom: 1px solid rgba(140,100,40,.4);
-  padding-bottom: 6px;
-  margin-bottom: 10px;
+  font-family: "Cinzel", serif; font-size: 13px; letter-spacing: 2px;
+  text-transform: uppercase; color: #6b4a1c;
+  border-bottom: 1px solid rgba(120,80,40,.4); padding-bottom: 6px; margin-bottom: 10px;
+  text-align: center;
 }
 .q-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.q-empty { font-style: italic; opacity: .55; font-size: 14px; }
+.q-empty { font-style: italic; opacity: .6; font-size: 14px; text-align: center; }
 .q-item { display: flex; gap: 10px; align-items: center; }
 .q-num {
-  width: 26px; height: 26px; flex-shrink: 0;
-  border-radius: 50%;
-  background: var(--wood);
-  color: var(--gold-bright);
-  font-family: "Cinzel", serif;
-  font-size: 13px;
+  width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%;
+  background: var(--wood); color: var(--gold-bright);
+  font-family: "Cinzel", serif; font-size: 13px;
   display: grid; place-items: center;
 }
 .q-info { min-width: 0; }
-.q-song { display: block; font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.q-song { display: block; font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #3a2912; }
 .q-by { display: block; font-size: 12px; font-style: italic; color: #7a5a28; }
 
-/* Etiqueta mini (visible solo al encoger) */
-.scroll-mini-label {
-  position: absolute;
-  top: 0; right: 0;
-  width: 72px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  pointer-events: none;
-  background: linear-gradient(180deg, rgba(216,192,138,.55), rgba(180,150,90,.55));
-  border-left: 2px solid var(--gold);
-  opacity: 0;
-  transition: opacity .6s ease;
-}
-.scroll-panel.mini .scroll-mini-label { opacity: 1; }
-.mini-icon { font-size: 28px; }
-.mini-count {
-  font-family: "Cinzel", serif;
-  font-weight: 600;
-  font-size: 18px;
-  color: var(--wood);
-  background: rgba(255,247,228,.7);
-  border: 1px solid var(--gold);
-  border-radius: 14px;
-  min-width: 30px;
-  text-align: center;
-  padding: 1px 6px;
-}
-
-/* En móviles el pergamino ocupa menos */
-@media (max-width: 600px) {
-  .scroll-panel.full { width: 78vw; }
-  .scroll-inner { width: 78vw; }
+@media (max-width: 640px) {
+  .scroll-panel { width: 64vw; right: 10px; }
 }

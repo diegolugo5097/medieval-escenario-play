@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { API_URL } from "./config";
+import { API_URL, FRAME_HOLE } from "./config";
 
-/* Carga la YouTube IFrame API una sola vez */
 function loadYT() {
   return new Promise((resolve) => {
     if (window.YT && window.YT.Player) return resolve(window.YT);
@@ -19,7 +18,7 @@ export default function App() {
   const [volume, setVolume] = useState(70);
   const [connected, setConnected] = useState(false);
 
-  // El pergamino: "full" = mostrado completo, "mini" = pequeño en esquina
+  // Pergamino: "full" = desplegado, "mini" = enrollado pequeño
   const [scrollState, setScrollState] = useState("full");
 
   const playerRef = useRef(null);
@@ -29,15 +28,38 @@ export default function App() {
   const hideTimerRef = useRef(null);
   const lastSongIdRef = useRef(null);
   const volumeRef = useRef(70);
+  const holeRef = useRef(null);
 
-  /* ---- Mostrar pergamino completo y programar que se encoja en 5s ---- */
+  /* ---- Ajustar el iframe para CUBRIR el hueco (sin barras negras) ---- */
+  function fitCover() {
+    const hole = holeRef.current;
+    const iframe = hole?.querySelector("iframe");
+    if (!hole || !iframe) return;
+    const hw = hole.clientWidth;
+    const hh = hole.clientHeight;
+    const videoRatio = 16 / 9;
+    const holeRatio = hw / hh;
+    let w, h;
+    if (holeRatio > videoRatio) {
+      // hueco más ancho: ajustar por ancho, sobra alto (se recorta)
+      w = hw;
+      h = hw / videoRatio;
+    } else {
+      // hueco más alto: ajustar por alto, sobra ancho
+      h = hh;
+      w = hh * videoRatio;
+    }
+    iframe.style.width = w + "px";
+    iframe.style.height = h + "px";
+  }
+
   function revealScroll() {
     setScrollState("full");
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     hideTimerRef.current = setTimeout(() => setScrollState("mini"), 5000);
   }
 
-  /* ---- Conexión WebSocket con el backend ---- */
+  /* ---- WebSocket ---- */
   useEffect(() => {
     let alive = true;
     function connect() {
@@ -66,43 +88,36 @@ export default function App() {
     };
   }, []);
 
-  /* ---- Mostrar pergamino completo al cargar ---- */
+  useEffect(() => { revealScroll(); }, []);
+
+  /* ---- Reajustar el video al cambiar tamaño de ventana ---- */
   useEffect(() => {
-    revealScroll();
+    function onResize() { fitCover(); }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  /* ---- Inicializar el player de YouTube ---- */
+  /* ---- Player de YouTube ---- */
   useEffect(() => {
     loadYT().then((YT) => {
       playerRef.current = new YT.Player("yt-player", {
         width: "100%",
         height: "100%",
-        playerVars: {
-          autoplay: 1,
-          controls: 0,
-          modestbranding: 1,
-          rel: 0,
-          fs: 0,
-          disablekb: 1,
-        },
+        playerVars: { autoplay: 1, controls: 0, modestbranding: 1, rel: 0, fs: 0, disablekb: 1 },
         events: {
           onReady: () => {
             ytReadyRef.current = true;
             if (playerRef.current?.setVolume) playerRef.current.setVolume(volumeRef.current);
-            if (currentVideoRef.current) {
-              playerRef.current.loadVideoById(currentVideoRef.current);
-            }
+            if (currentVideoRef.current) playerRef.current.loadVideoById(currentVideoRef.current);
+            fitCover();
           },
-          onStateChange: (e) => {
-            if (e.data === 0) avanzar();
-          },
+          onStateChange: (e) => { if (e.data === 0) avanzar(); },
           onError: () => avanzar(),
         },
       });
     });
   }, []);
 
-  /* ---- Cuando cambia la canción actual: cargar video + revelar pergamino ---- */
   useEffect(() => {
     const vid = nowPlaying?.videoId || null;
     currentVideoRef.current = vid;
@@ -112,8 +127,6 @@ export default function App() {
     if (!vid && ytReadyRef.current && playerRef.current?.stopVideo) {
       playerRef.current.stopVideo();
     }
-
-    // Si de verdad cambió la canción (no solo un re-render), revelar pergamino
     const sid = nowPlaying?.id || null;
     if (sid !== lastSongIdRef.current) {
       lastSongIdRef.current = sid;
@@ -121,7 +134,6 @@ export default function App() {
     }
   }, [nowPlaying?.videoId, nowPlaying?.id]);
 
-  /* ---- Aplicar pausa/play que viene del backend ---- */
   useEffect(() => {
     const p = playerRef.current;
     if (!ytReadyRef.current || !p) return;
@@ -129,49 +141,56 @@ export default function App() {
     if (!paused && p.playVideo) p.playVideo();
   }, [paused]);
 
-  /* ---- Aplicar volumen que viene del backend ---- */
   useEffect(() => {
     volumeRef.current = volume;
     const p = playerRef.current;
     if (!ytReadyRef.current || !p || !p.setVolume) return;
     p.setVolume(volume);
-    // Si el video arrancó mudo (autoplay) y el admin sube el volumen, desmutear
     if (volume > 0 && p.isMuted && p.isMuted() && p.unMute) p.unMute();
     if (volume === 0 && p.mute) p.mute();
   }, [volume, nowPlaying?.videoId]);
 
   async function avanzar() {
-    try {
-      await fetch(`${API_URL}/api/next`, { method: "POST" });
-    } catch {}
+    try { await fetch(`${API_URL}/api/next`, { method: "POST" }); } catch {}
   }
 
   return (
     <div className="stage">
-      {/* Video a pantalla completa */}
-      <div className="video-full">
-        <div id="yt-player" className="yt-player" />
+      <div className="embers" />
 
-        {!nowPlaying && (
-          <div className="idle">
-            <div className="idle-crest">⚜</div>
-            <h2>El escenario aguarda</h2>
-            <p>Pedid una canción desde la app del Café Medieval</p>
-            <div className="idle-flame">♪ ♫ ♪</div>
+      {/* Video (debajo) */}
+      <div className="frame-wrap">
+        <div className="frame-box">
+          <div
+            className="video-hole"
+            ref={holeRef}
+            style={{
+              left: `${FRAME_HOLE.left}%`,
+              top: `${FRAME_HOLE.top}%`,
+              width: `${FRAME_HOLE.width}%`,
+              height: `${FRAME_HOLE.height}%`,
+            }}
+          >
+            <div id="yt-player" className="yt-player" />
+            {!nowPlaying && (
+              <div className="idle">
+                <div className="idle-crest">⚜</div>
+                <h2>El escenario aguarda</h2>
+                <p>Pedid una canción desde la app del Café Medieval</p>
+                <div className="idle-flame">♪ ♫ ♪</div>
+              </div>
+            )}
+            {nowPlaying && paused && <div className="paused-badge">⏸ En pausa</div>}
           </div>
-        )}
-
-        {nowPlaying && paused && (
-          <div className="paused-badge">⏸ En pausa</div>
-        )}
+        </div>
       </div>
 
-      {/* Pergamino de la cola a la derecha */}
+      {/* Pergamino vertical con la cola (se despliega de arriba a abajo) */}
       <aside className={`scroll-panel ${scrollState}`}>
-        <div className="scroll-inner">
+        <div className="scroll-bg" />
+        <div className="scroll-content">
           <div className="scroll-top">
-            <span className="scroll-crest">⚜</span>
-            <h1 className="scroll-brand">Café Medieval</h1>
+            <h1 className="scroll-brand">La Cola del Bardo</h1>
             <span className={`dot ${connected ? "on" : "off"}`} />
           </div>
 
@@ -185,9 +204,7 @@ export default function App() {
 
           <div className="q-head">A continuación · {queue.length}</div>
           <ol className="q-list">
-            {queue.length === 0 && (
-              <li className="q-empty">— silencio en la taberna —</li>
-            )}
+            {queue.length === 0 && <li className="q-empty">— silencio en la taberna —</li>}
             {queue.map((s, i) => (
               <li key={s.id} className="q-item">
                 <span className="q-num">{i + 1}</span>
@@ -199,13 +216,10 @@ export default function App() {
             ))}
           </ol>
         </div>
-
-        {/* Versión mini: solo un resumen cuando está encogido */}
-        <div className="scroll-mini-label">
-          <span className="mini-icon">📜</span>
-          <span className="mini-count">{queue.length}</span>
-        </div>
       </aside>
+
+      {/* Marco SIEMPRE encima de todo (video y pergamino) */}
+      <img className="frame-img" src="/marco_medieval.png" alt="" />
     </div>
   );
 }
