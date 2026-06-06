@@ -16,6 +16,7 @@ export default function App() {
   const [queue, setQueue] = useState([]);
   const [paused, setPaused] = useState(false);
   const [volume, setVolume] = useState(70);
+  const [songVolumes, setSongVolumes] = useState({});
   const [connected, setConnected] = useState(false);
 
   // Pergamino: "full" = desplegado, "mini" = enrollado pequeño
@@ -73,6 +74,7 @@ export default function App() {
           setNowPlaying(data.nowPlaying || null);
           setPaused(!!data.paused);
           if (typeof data.volume === "number") setVolume(data.volume);
+          if (data.songVolumes) setSongVolumes(data.songVolumes);
         }
       };
       ws.onclose = () => {
@@ -142,13 +144,17 @@ export default function App() {
   }, [paused]);
 
   useEffect(() => {
-    volumeRef.current = volume;
+    // Si la canción actual tiene un ajuste propio, usarlo; si no, el volumen general
+    const vid = nowPlaying?.videoId;
+    const effective =
+      vid && typeof songVolumes[vid] === "number" ? songVolumes[vid] : volume;
+    volumeRef.current = effective;
     const p = playerRef.current;
     if (!ytReadyRef.current || !p || !p.setVolume) return;
-    p.setVolume(volume);
-    if (volume > 0 && p.isMuted && p.isMuted() && p.unMute) p.unMute();
-    if (volume === 0 && p.mute) p.mute();
-  }, [volume, nowPlaying?.videoId]);
+    p.setVolume(effective);
+    if (effective > 0 && p.isMuted && p.isMuted() && p.unMute) p.unMute();
+    if (effective === 0 && p.mute) p.mute();
+  }, [volume, songVolumes, nowPlaying?.videoId]);
 
   async function avanzar() {
     try { await fetch(`${API_URL}/api/next`, { method: "POST" }); } catch {}
