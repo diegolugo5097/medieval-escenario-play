@@ -3,12 +3,11 @@ export const API_URL =
   import.meta.env.VITE_API_URL || "http://localhost:4000";
 
 // Coordenadas del recuadro del video DENTRO del marco (en % de la pantalla).
-// 'top' = 19.5% deja el escudo "Medieval Café" (que baja hasta ~18%) COMPLETO
-// por encima. El video nunca llega a esa altura, así que es imposible que lo
-// corte, sin depender de trucos de capas del navegador.
+// El marco va por encima del video (z-index + 3D), así el escudo nunca se corta.
+// Hueco del marco nuevo (más amplio que el anterior).
 export const FRAME_HOLE = {
-  left: 8.55,
-  top: 19.5,
-  width: 82.89,
-  height: 64.0,
+  left: 3.29,
+  top: 6.06,
+  width: 93.42,
+  height: 87.35,
 };
